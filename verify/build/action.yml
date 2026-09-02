@@ -1,0 +1,184 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Verify SLSA build attestation
+description: >
+  Verifies a SLSA build provenance attestation with slsa-verifier:
+  signatures, the builder's identity, the artifacts it is about, and
+  the expectations given as inputs.
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  attestation:
+    description: 'Path to the attestation: a plain in-toto statement, DSSE envelope, or Sigstore bundle'
+    required: true
+  artifacts:
+    description: 'Artifact files the attestation must be about, one per line'
+    required: false
+    default: ''
+  subjects:
+    description: 'Subject digests the attestation must be about, as algorithm:digest, one per line'
+    required: false
+    default: ''
+  expected-source:
+    description: 'Repository the artifacts must have been built from, eg github.com/org/repo'
+    required: false
+    default: ''
+  expected-branch:
+    description: 'Branch the build must have been triggered from, eg main'
+    required: false
+    default: ''
+  expected-tag:
+    description: 'Tag the build must have been triggered by, eg v1.2.3'
+    required: false
+    default: ''
+  expected-versioned-tag:
+    description: 'Semantic version the triggering tag must satisfy, eg v1 or v1.2'
+    required: false
+    default: ''
+  expected-workflow-inputs:
+    description: 'workflow_dispatch inputs the build must have been triggered with, as name=value, one per line'
+    required: false
+    default: ''
+  trusted-builders:
+    description: >
+      Builder ids trusted to have produced the provenance, one per line.
+      An id without an @ref trusts the builder at any ref.
+    required: true
+  params:
+    description: 'Further control parameters as name:value or name:[a,b], one per line'
+    required: false
+    default: ''
+  signer:
+    description: >
+      Expected signer identity specs, one per line, eg
+      sigstore::https://token.actions.githubusercontent.com::https://github.com/org/repo/.github/workflows/release.yml@refs/tags/v1.2.3.
+      Implies require-signatures and binds builders the registry does not know.
+    required: false
+    default: ''
+  require-signatures:
+    description: 'Fail unless the attestation carries a signature that verified'
+    required: false
+    default: 'false'
+  key:
+    description: 'Public key files for DSSE envelopes, one per line'
+    required: false
+    default: ''
+  builder:
+    description: 'Builders bound to their signing identity as id=<signer spec> or id=<OIDC issuer>, one per line'
+    required: false
+    default: ''
+  builders:
+    description: 'Builder registry file or directory merged over the embedded registry'
+    required: false
+    default: ''
+  level:
+    description: 'Required SLSA build level, 1-3; controls above it are informative'
+    required: false
+    default: ''
+  spec:
+    description: 'SLSA spec version to verify against, eg 1.2; defaults to the latest'
+    required: false
+    default: ''
+  controls:
+    description: 'YAML file or directory of user-supplied controls'
+    required: false
+    default: ''
+  skip-buildtype-checks:
+    description: 'Skip the buildType-specific checks whose expectations were not given, instead of refusing to run'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'Include skipped controls and control titles in the roster'
+    required: false
+    default: 'false'
+  vsa:
+    description: 'Path to write an unsigned Verification Summary Attestation to, on a pass'
+    required: false
+    default: ''
+  verifier-id:
+    description: 'verifier.id to record in the emitted VSA'
+    required: false
+    default: ''
+  args:
+    description: 'Further slsa-verifier build arguments, whitespace-separated'
+    required: false
+    default: ''
+  version:
+    description: 'slsa-verifier release to use'
+    required: false
+    default: 'v0.1.0-alpha.1'
+  repo:
+    description: 'GitHub repository publishing the slsa-verifier releases'
+    required: false
+    default: 'slsa-framework/verifier'
+
+outputs:
+  result:
+    description: 'PASS, FAIL, or ERROR when the verification could not run'
+    value: ${{ steps.verify.outputs.result }}
+  level:
+    description: 'SLSA build level the attestation reached'
+    value: ${{ steps.verify.outputs.level }}
+  vsa:
+    description: 'Path of the emitted VSA, when one was requested and the verification passed'
+    value: ${{ steps.verify.outputs.vsa }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: download
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/../../install/verifier/download.sh"
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repo }}
+        VERIFY: "true"
+
+    # The verifier release is itself verified before it is trusted: the
+    # provenance published with it must cover the binary, name the
+    # repository's release workflow as the builder, and be signed by
+    # that workflow running at the requested tag.
+    - name: Verify the slsa-verifier release provenance
+      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        subject: ${{ steps.download.outputs.binary }}
+        collector: jsonl:${{ steps.download.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        context: "builderId:${{ steps.download.outputs.builder-id }}"
+        signer: ${{ steps.download.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    # Inputs reach the script through the environment, never the command
+    # line; the script turns them into arguments without a shell in between.
+    - id: verify
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/verify.sh"
+      env:
+        VERIFIER: ${{ steps.download.outputs.binary }}
+        INPUT_ATTESTATION: ${{ inputs.attestation }}
+        INPUT_ARTIFACTS: ${{ inputs.artifacts }}
+        INPUT_SUBJECTS: ${{ inputs.subjects }}
+        INPUT_EXPECTED_SOURCE: ${{ inputs.expected-source }}
+        INPUT_EXPECTED_BRANCH: ${{ inputs.expected-branch }}
+        INPUT_EXPECTED_TAG: ${{ inputs.expected-tag }}
+        INPUT_EXPECTED_VERSIONED_TAG: ${{ inputs.expected-versioned-tag }}
+        INPUT_EXPECTED_WORKFLOW_INPUTS: ${{ inputs.expected-workflow-inputs }}
+        INPUT_TRUSTED_BUILDERS: ${{ inputs.trusted-builders }}
+        INPUT_PARAMS: ${{ inputs.params }}
+        INPUT_SIGNER: ${{ inputs.signer }}
+        INPUT_REQUIRE_SIGNATURES: ${{ inputs.require-signatures }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_BUILDER: ${{ inputs.builder }}
+        INPUT_BUILDERS: ${{ inputs.builders }}
+        INPUT_LEVEL: ${{ inputs.level }}
+        INPUT_SPEC: ${{ inputs.spec }}
+        INPUT_CONTROLS: ${{ inputs.controls }}
+        INPUT_SKIP_BUILDTYPE_CHECKS: ${{ inputs.skip-buildtype-checks }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_VSA: ${{ inputs.vsa }}
+        INPUT_VERIFIER_ID: ${{ inputs.verifier-id }}
+        INPUT_ARGS: ${{ inputs.args }}

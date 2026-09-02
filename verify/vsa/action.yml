@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Verify SLSA VSA
+description: >
+  Verifies a SLSA Verification Summary Attestation with slsa-verifier:
+  its signature, the verifier that issued it and the identity bound to
+  that verifier, the subjects it is about, and the levels, resource,
+  policy and dependencies it states.
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  attestation:
+    description: 'Path to the VSA: a plain in-toto statement, DSSE envelope, Sigstore bundle, or a JSON lines file of them'
+    required: false
+    default: ''
+  commit:
+    description: >
+      Commit whose git note holds the VSA, read from the checked-out
+      repository's origin. The commit is also a subject the VSA must be
+      about. Give either this or attestation.
+    required: false
+    default: ''
+  path:
+    description: 'Directory of the checked-out repository whose git notes hold the VSA'
+    required: false
+    default: '.'
+  artifacts:
+    description: 'Artifact files the VSA must be about, one per line'
+    required: false
+    default: ''
+  subjects:
+    description: 'Subject digests the VSA must be about, as algorithm:digest, one per line'
+    required: false
+    default: ''
+  verifier:
+    description: >
+      Accepted verifier.id, optionally bound to the signer authorized to
+      issue VSAs for it as id=<signer spec>, one per line (required). A
+      verifier with no signer is refused unless allow-unbound-verifier
+      or a wildcard signer is given.
+    required: true
+  allow-unbound-verifier:
+    description: 'Accept a verifier that has no authorized signer, matching its id only'
+    required: false
+    default: 'false'
+  signer:
+    description: 'Signer identity specs authorized for every verifier, one per line; implies require-signatures'
+    required: false
+    default: ''
+  require-signatures:
+    description: 'Fail unless the VSA carries a signature that verified'
+    required: false
+    default: 'false'
+  key:
+    description: 'Public key files for DSSE envelopes, one per line'
+    required: false
+    default: ''
+  level:
+    description: 'Required level, eg SLSA_BUILD_LEVEL_3, one per line; any one satisfied at or above within its track passes'
+    required: false
+    default: ''
+  resource:
+    description: 'Expected resourceUri, matched exactly'
+    required: false
+    default: ''
+  policy:
+    description: 'Expected policy.uri, matched exactly'
+    required: false
+    default: ''
+  dependency:
+    description: 'dependencyLevels keys that must be present, one per line'
+    required: false
+    default: ''
+  args:
+    description: 'Further slsa-verifier vsa arguments, whitespace-separated'
+    required: false
+    default: ''
+  version:
+    description: 'slsa-verifier release to use'
+    required: false
+    default: 'v0.1.0-alpha.1'
+  repo:
+    description: 'GitHub repository publishing the slsa-verifier releases'
+    required: false
+    default: 'slsa-framework/verifier'
+
+outputs:
+  result:
+    description: 'PASS, FAIL, or ERROR when the verification could not run'
+    value: ${{ steps.verify.outputs.result }}
+  levels:
+    description: 'Levels the VSA states, comma-separated'
+    value: ${{ steps.verify.outputs.levels }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: download
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/../../install/verifier/download.sh"
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repo }}
+        VERIFY: "true"
+
+    # The verifier release is itself verified before it is trusted: the
+    # provenance published with it must cover the binary, name the
+    # repository's release workflow as the builder, and be signed by
+    # that workflow running at the requested tag.
+    - name: Verify the slsa-verifier release provenance
+      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        subject: ${{ steps.download.outputs.binary }}
+        collector: jsonl:${{ steps.download.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        context: "builderId:${{ steps.download.outputs.builder-id }}"
+        signer: ${{ steps.download.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    # Inputs reach the script through the environment, never the command
+    # line; the script turns them into arguments without a shell in between.
+    - id: verify
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/verify.sh"
+      env:
+        VERIFIER: ${{ steps.download.outputs.binary }}
+        INPUT_ATTESTATION: ${{ inputs.attestation }}
+        INPUT_COMMIT: ${{ inputs.commit }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_ARTIFACTS: ${{ inputs.artifacts }}
+        INPUT_SUBJECTS: ${{ inputs.subjects }}
+        INPUT_VERIFIER: ${{ inputs.verifier }}
+        INPUT_ALLOW_UNBOUND_VERIFIER: ${{ inputs.allow-unbound-verifier }}
+        INPUT_SIGNER: ${{ inputs.signer }}
+        INPUT_REQUIRE_SIGNATURES: ${{ inputs.require-signatures }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_LEVEL: ${{ inputs.level }}
+        INPUT_RESOURCE: ${{ inputs.resource }}
+        INPUT_POLICY: ${{ inputs.policy }}
+        INPUT_DEPENDENCY: ${{ inputs.dependency }}
+        INPUT_ARGS: ${{ inputs.args }}

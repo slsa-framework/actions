@@ -1,0 +1,246 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Test actions
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  install-verifier:
+    name: install/verifier (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: install
+        uses: ./install/verifier
+
+      - name: The installed binary is on the PATH and is the verified one
+        shell: bash
+        run: |
+          test -x "${INSTALLED}"
+          slsa-verifier --help >/dev/null
+          echo "installed ${VERSION} at ${INSTALLED}"
+        env:
+          INSTALLED: ${{ steps.install.outputs.path }}
+          VERSION: ${{ steps.install.outputs.version }}
+
+      - name: Verifying a release with the installed verifier
+        shell: bash
+        run: |
+          curl -sSfL -o attestations.jsonl \
+            "https://github.com/slsa-framework/verifier/releases/download/${VERSION}/attestations.jsonl"
+          slsa-verifier build attestations.jsonl \
+            --require-signatures \
+            --signer "sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/verifier/.github/workflows/release.yaml@refs/tags/${VERSION}" \
+            --param expected_source:github.com/slsa-framework/verifier \
+            --param "trusted_builders:[https://github.com/slsa-framework/verifier/.github/workflows/release.yaml]" \
+            --skip-buildtype-checks
+        env:
+          VERSION: ${{ steps.install.outputs.version }}
+
+  verify-build:
+    name: verify/build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The verifier's own release provenance and binary are the fixture:
+      # a real tag build, signed by a real workflow.
+      - name: Fetch a release and its provenance
+        id: release
+        shell: bash
+        run: |
+          VERSION=v0.1.0-alpha.1
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64) file="slsa-verifier-${VERSION}-linux-amd64" ;;
+            Linux-ARM64) file="slsa-verifier-${VERSION}-linux-arm64" ;;
+            macOS-ARM64) file="slsa-verifier-${VERSION}-darwin-arm64" ;;
+            Windows-X64) file="slsa-verifier-${VERSION}-windows-amd64.exe" ;;
+            *) echo "::error::unsupported runner ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          base="https://github.com/slsa-framework/verifier/releases/download/${VERSION}"
+          curl -sSfL -o attestations.jsonl "${base}/attestations.jsonl"
+          curl -sSfL -o "${file}" "${base}/${file}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "artifact=${file}" >> "$GITHUB_OUTPUT"
+
+      - id: verify
+        uses: ./verify/build
+        with:
+          attestation: attestations.jsonl
+          artifacts: ${{ steps.release.outputs.artifact }}
+          expected-source: github.com/slsa-framework/verifier
+          trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/release.yaml
+          signer: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/verifier/.github/workflows/release.yaml@refs/tags/${{ steps.release.outputs.version }}
+          skip-buildtype-checks: true
+          vsa: release.vsa.json
+
+      - name: Outputs
+        shell: bash
+        run: |
+          test "${RESULT}" = PASS
+          test "${LEVEL}" = 3
+          test -s "${VSA}"
+        env:
+          RESULT: ${{ steps.verify.outputs.result }}
+          LEVEL: ${{ steps.verify.outputs.level }}
+          VSA: ${{ steps.verify.outputs.vsa }}
+
+      - name: A wrong builder fails, and says so
+        id: wrong
+        continue-on-error: true
+        uses: ./verify/build
+        with:
+          attestation: attestations.jsonl
+          expected-source: github.com/slsa-framework/verifier
+          trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/go-build-and-test.yaml
+          skip-buildtype-checks: true
+
+      - shell: bash
+        run: test "${OUTCOME}" = failure && test "${RESULT}" = FAIL
+        env:
+          OUTCOME: ${{ steps.wrong.outcome }}
+          RESULT: ${{ steps.wrong.outputs.result }}
+
+  verify-source:
+    name: verify/source (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A public repository whose commits carry source attestations in
+      # their git notes, stored by the SLSA source tool.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: puerco/lab
+          ref: e679f67df389afb2d81c6934572477cc597d71ec
+          path: lab
+          persist-credentials: false
+
+      - id: verify
+        uses: ./verify/source
+        with:
+          path: lab
+          commit: e679f67df389afb2d81c6934572477cc597d71ec
+          expected-repo: https://github.com/puerco/lab
+          expected-branch: refs/heads/master
+          official: true
+          level: 3
+          vsa: source.vsa.json
+
+      - name: Outputs
+        shell: bash
+        run: |
+          test "${RESULT}" = PASS
+          test "${LEVEL}" = 3
+          test -s "${VSA}"
+        env:
+          RESULT: ${{ steps.verify.outputs.result }}
+          LEVEL: ${{ steps.verify.outputs.level }}
+          VSA: ${{ steps.verify.outputs.vsa }}
+
+      - name: The wrong branch fails, and says so
+        id: wrong
+        continue-on-error: true
+        uses: ./verify/source
+        with:
+          path: lab
+          commit: e679f67df389afb2d81c6934572477cc597d71ec
+          expected-repo: https://github.com/puerco/lab
+          expected-branch: refs/heads/main
+          official: true
+
+      - shell: bash
+        run: test "${OUTCOME}" = failure && test "${RESULT}" = FAIL
+        env:
+          OUTCOME: ${{ steps.wrong.outcome }}
+          RESULT: ${{ steps.wrong.outputs.result }}
+
+  verify-vsa:
+    name: verify/vsa (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The SLSA source tool stores the VSA it issues for a commit in the
+      # commit's git note, next to the source provenance.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: puerco/lab
+          ref: e679f67df389afb2d81c6934572477cc597d71ec
+          path: lab
+          persist-credentials: false
+
+      - id: verify
+        uses: ./verify/vsa
+        with:
+          path: lab
+          commit: e679f67df389afb2d81c6934572477cc597d71ec
+          verifier: https://github.com/slsa-framework/source-actions=sigstore(identityMatch=prefix)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@
+          level: SLSA_SOURCE_LEVEL_1
+          resource: git+https://github.com/puerco/lab
+
+      - name: Outputs
+        shell: bash
+        run: |
+          test "${RESULT}" = PASS
+          test "${LEVELS}" = SLSA_SOURCE_LEVEL_1
+        env:
+          RESULT: ${{ steps.verify.outputs.result }}
+          LEVELS: ${{ steps.verify.outputs.levels }}
+
+      - name: A level the VSA does not reach fails, and says so
+        id: wrong
+        continue-on-error: true
+        uses: ./verify/vsa
+        with:
+          path: lab
+          commit: e679f67df389afb2d81c6934572477cc597d71ec
+          verifier: https://github.com/slsa-framework/source-actions=sigstore(identityMatch=prefix)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@
+          level: SLSA_SOURCE_LEVEL_3
+
+      - shell: bash
+        run: test "${OUTCOME}" = failure && test "${RESULT}" = FAIL
+        env:
+          OUTCOME: ${{ steps.wrong.outcome }}
+          RESULT: ${{ steps.wrong.outputs.result }}

@@ -1,0 +1,91 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Install slsa-verifier
+description: >
+  Installs slsa-verifier into the runner, verified against the SLSA
+  provenance published with its release, and adds it to the PATH.
+branding:
+  icon: 'download-cloud'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'slsa-verifier release to install, e.g. v0.1.0'
+    required: false
+    default: 'v0.1.0-alpha.1'
+  install-dir:
+    description: 'Directory to install into (the binary lands in its bin/)'
+    required: false
+    default: '$HOME/.slsa'
+  repo:
+    description: 'GitHub repository publishing the slsa-verifier releases'
+    required: false
+    default: 'slsa-framework/verifier'
+  verify:
+    description: >
+      Verify the downloaded release against its provenance with the
+      AMPEL policy engine before installing. Only disable to install a
+      release that published no provenance.
+    required: false
+    default: 'true'
+
+outputs:
+  path:
+    description: 'Absolute path of the installed slsa-verifier binary'
+    value: ${{ steps.install.outputs.path }}
+  bin-dir:
+    description: 'Directory added to the PATH'
+    value: ${{ steps.install.outputs.bin-dir }}
+  version:
+    description: 'Release that was installed'
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    # Inputs reach the scripts through the environment, never the command
+    # line, and the scripts validate them before use.
+    - id: download
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/download.sh"
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repo }}
+        VERIFY: ${{ inputs.verify }}
+
+    # The release is verified before it is installed: the provenance
+    # published with it must cover the binary, name the repository's
+    # release workflow as the builder, and be signed by that workflow
+    # running at the requested tag.
+    - if: ${{ inputs.verify == 'true' }}
+      name: Verify the release provenance
+      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        subject: ${{ steps.download.outputs.binary }}
+        collector: jsonl:${{ steps.download.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        context: "builderId:${{ steps.download.outputs.builder-id }}"
+        signer: ${{ steps.download.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    - id: install
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/install.sh"
+      env:
+        BINARY: ${{ steps.download.outputs.binary }}
+        VERSION: ${{ steps.download.outputs.version }}
+        INSTALL_DIR: ${{ inputs.install-dir }}
+
+    # The script emits the directory in a spelling every OS accepts
+    # (C:/... on Windows), so one bash append serves all runners.
+    - shell: bash
+      run: echo "${BIN_DIR}" >> "$GITHUB_PATH" # zizmor: ignore[github-env] bin-dir is validated by install.sh
+      env:
+        BIN_DIR: ${{ steps.install.outputs.bin-dir }}
+
+    - shell: bash
+      run: slsa-verifier --help >/dev/null && echo "slsa-verifier ${VERSION} ready"
+      env:
+        VERSION: ${{ steps.install.outputs.version }}

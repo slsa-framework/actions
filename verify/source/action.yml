@@ -1,0 +1,170 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Verify SLSA source attestation
+description: >
+  Verifies a SLSA source provenance attestation with slsa-verifier,
+  from a file or from the git note of a commit of the checked-out
+  repository: signature, the repository and branch or tag it is about,
+  and the source level it reaches.
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  attestation:
+    description: 'Path to the attestation: a plain in-toto statement, DSSE envelope, Sigstore bundle, or a JSON lines file of them'
+    required: false
+    default: ''
+  commit:
+    description: >
+      Commit whose git note holds the attestation, read from the
+      checked-out repository's origin. The commit is also the subject
+      the attestation must be about. Give either this or attestation.
+    required: false
+    default: ''
+  path:
+    description: 'Directory of the checked-out repository whose git notes hold the attestation'
+    required: false
+    default: '.'
+  subject:
+    description: 'Commit the attestation must be about, as gitCommit:<sha> or a bare sha (implied by commit)'
+    required: false
+    default: ''
+  expected-repo:
+    description: 'Repository the attestation must be about, eg https://github.com/org/repo'
+    required: false
+    default: ${{ github.server_url }}/${{ github.repository }}
+  expected-branch:
+    description: 'Branch the attestation must be about, eg refs/heads/main'
+    required: false
+    default: ''
+  expected-tag:
+    description: 'Tag a tag provenance must be about, eg v1.2.3'
+    required: false
+    default: ''
+  official:
+    description: 'Require the attestation to be signed by the official SLSA source-actions workflow identity (implies require-signatures)'
+    required: false
+    default: 'false'
+  signer:
+    description: 'Expected signer identity specs, one per line; implies require-signatures'
+    required: false
+    default: ''
+  require-signatures:
+    description: 'Fail unless the attestation carries a signature that verified'
+    required: false
+    default: 'false'
+  key:
+    description: 'Public key files for DSSE envelopes, one per line'
+    required: false
+    default: ''
+  params:
+    description: 'Further control parameters as name:value, one per line'
+    required: false
+    default: ''
+  level:
+    description: 'Required SLSA source level, 1-4 (eg 3 or SLSA_SOURCE_LEVEL_3); defaults to 1'
+    required: false
+    default: ''
+  since:
+    description: 'Require the controls to have been active since at or before this date (RFC3339 or YYYY-MM-DD)'
+    required: false
+    default: ''
+  spec:
+    description: 'SLSA spec version to verify against, eg 1.2; defaults to the latest'
+    required: false
+    default: ''
+  controls:
+    description: 'YAML file or directory of user-supplied controls'
+    required: false
+    default: ''
+  verbose:
+    description: 'Include skipped controls and control titles in the roster'
+    required: false
+    default: 'false'
+  vsa:
+    description: 'Path to write an unsigned Verification Summary Attestation to, on a pass'
+    required: false
+    default: ''
+  verifier-id:
+    description: 'verifier.id to record in the emitted VSA'
+    required: false
+    default: ''
+  args:
+    description: 'Further slsa-verifier source arguments, whitespace-separated'
+    required: false
+    default: ''
+  version:
+    description: 'slsa-verifier release to use'
+    required: false
+    default: 'v0.1.0-alpha.1'
+  repo:
+    description: 'GitHub repository publishing the slsa-verifier releases'
+    required: false
+    default: 'slsa-framework/verifier'
+
+outputs:
+  result:
+    description: 'PASS, FAIL, or ERROR when the verification could not run'
+    value: ${{ steps.verify.outputs.result }}
+  level:
+    description: 'SLSA source level the attestation reached'
+    value: ${{ steps.verify.outputs.level }}
+  vsa:
+    description: 'Path of the emitted VSA, when one was requested and the verification passed'
+    value: ${{ steps.verify.outputs.vsa }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: download
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/../../install/verifier/download.sh"
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repo }}
+        VERIFY: "true"
+
+    # The verifier release is itself verified before it is trusted: the
+    # provenance published with it must cover the binary, name the
+    # repository's release workflow as the builder, and be signed by
+    # that workflow running at the requested tag.
+    - name: Verify the slsa-verifier release provenance
+      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        subject: ${{ steps.download.outputs.binary }}
+        collector: jsonl:${{ steps.download.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        context: "builderId:${{ steps.download.outputs.builder-id }}"
+        signer: ${{ steps.download.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    # Inputs reach the script through the environment, never the command
+    # line; the script turns them into arguments without a shell in between.
+    - id: verify
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/verify.sh"
+      env:
+        VERIFIER: ${{ steps.download.outputs.binary }}
+        INPUT_ATTESTATION: ${{ inputs.attestation }}
+        INPUT_COMMIT: ${{ inputs.commit }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_SUBJECT: ${{ inputs.subject }}
+        INPUT_EXPECTED_REPO: ${{ inputs.expected-repo }}
+        INPUT_EXPECTED_BRANCH: ${{ inputs.expected-branch }}
+        INPUT_EXPECTED_TAG: ${{ inputs.expected-tag }}
+        INPUT_OFFICIAL: ${{ inputs.official }}
+        INPUT_SIGNER: ${{ inputs.signer }}
+        INPUT_REQUIRE_SIGNATURES: ${{ inputs.require-signatures }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_PARAMS: ${{ inputs.params }}
+        INPUT_LEVEL: ${{ inputs.level }}
+        INPUT_SINCE: ${{ inputs.since }}
+        INPUT_SPEC: ${{ inputs.spec }}
+        INPUT_CONTROLS: ${{ inputs.controls }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_VSA: ${{ inputs.vsa }}
+        INPUT_VERIFIER_ID: ${{ inputs.verifier-id }}
+        INPUT_ARGS: ${{ inputs.args }}
