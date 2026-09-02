@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2025 The SLSA Authors
 # SPDX-License-Identifier: Apache-2.0
 ---
-  
+
 name: "Compute SLSA Source Metadata"
 on:
   workflow_call:
@@ -31,8 +31,28 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
+    # A reusable workflow runs in the caller's checkout, so it cannot call
+    # the actions of its own repository by a relative path. Check the
+    # repository this workflow file comes from out at its commit and call
+    # the action from there, so both are always pinned to the same release.
+    - name: Locate this workflow's repository
+      id: workflow
+      shell: bash
+      env:
+        JOB_WORKFLOW_REF: ${{ github.job_workflow_ref }}
+      run: |
+        # job_workflow_ref is owner/repo/.github/workflows/file.yml@ref
+        IFS=/ read -r owner repo _ <<< "${JOB_WORKFLOW_REF}"
+        echo "repository=${owner}/${repo}" >> "${GITHUB_OUTPUT}"
+    - name: Check out the SLSA actions
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ steps.workflow.outputs.repository }}
+        ref: ${{ github.job_workflow_sha }}
+        path: .slsa-actions
+        persist-credentials: false
     - name: prov
-      uses: slsa-framework/source-actions/slsa_with_provenance@main
+      uses: ./.slsa-actions/slsa_with_provenance
       with:
         allow-merge-commits: ${{inputs.allow-merge-commits}}
         build-from-source: ${{ inputs.build-from-source }}

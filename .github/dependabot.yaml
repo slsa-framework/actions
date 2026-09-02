@@ -5,6 +5,7 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directories:
+      - "/"
       - "get_note/"
       - "slsa_with_provenance/"
       - "store_note/"
