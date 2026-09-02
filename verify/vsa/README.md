@@ -16,8 +16,20 @@ that verifier, the subjects it is about, and what it states.
 ```
 
 A `verifier.id` is a claim written into the document, so a verifier is
-accepted only together with the signer authorized to issue VSAs for it
-(`id=<signer spec>`), a wildcard `signer`, or `allow-unbound-verifier`.
+accepted only together with the signer authorized to issue VSAs for it:
+bound inline (`id=<signer spec>`), through a registry file given with
+`verifiers`, or by a wildcard `signer` — else the run is refused unless
+`allow-unbound-verifier` is set. With a registry the `verifier` input
+shrinks to the bare id:
+
+```yaml
+- uses: slsa-framework/actions/verify/vsa@<sha>
+  with:
+    attestation: commit.vsa.jsonl
+    verifier: https://github.com/slsa-framework/source-actions
+    verifiers: ci/verifiers.yaml   # binds the id to its signer
+    level: SLSA_SOURCE_LEVEL_1
+```
 With `commit`, the VSA is read from the commit's git note, as sourcetool
 stores it, and the commit is a subject the VSA must be about:
 
@@ -44,7 +56,8 @@ With `continue-on-error: true` the `result` output tells which.
 | `commit`, `path` | note | Commit whose git note holds the VSA, in the checkout at `path`; also a subject |
 | `artifacts` | positional | Artifact files the VSA must be about, one per line |
 | `subjects` | `--subject` | Digests as `algorithm:digest`, one per line |
-| `verifier` | `--verifier` | Accepted verifier ids, bound as `id=<signer spec>`, one per line (required) |
+| `verifier` | `--verifier` | Accepted verifier ids, bound as `id=<signer spec>` or bare when a registry binds them, one per line (required) |
+| `verifiers` | `--verifiers` | Registry file or directory binding verifier ids to their signers |
 | `allow-unbound-verifier` | `--allow-unbound-verifier` | Accept a verifier with no authorized signer |
 | `signer` | `--signer` | Wildcard signer specs, one per line |
 | `require-signatures` | `--require-signatures` | Fail unless a signature verified |

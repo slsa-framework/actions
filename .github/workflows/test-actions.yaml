@@ -229,6 +229,31 @@ jobs:
           RESULT: ${{ steps.verify.outputs.result }}
           LEVELS: ${{ steps.verify.outputs.levels }}
 
+      # The registry file binds the verifier id to its signer, so the
+      # verifier input shrinks to the bare id.
+      - name: Write a verifier registry
+        shell: bash
+        run: |
+          cat > verifiers.yaml <<'REG'
+          verifiers:
+            - id: https://github.com/slsa-framework/source-actions
+              issuer: https://token.actions.githubusercontent.com
+          REG
+
+      - id: registry
+        uses: ./verify/vsa
+        with:
+          path: lab
+          commit: e679f67df389afb2d81c6934572477cc597d71ec
+          verifier: https://github.com/slsa-framework/source-actions
+          verifiers: verifiers.yaml
+          level: SLSA_SOURCE_LEVEL_1
+
+      - shell: bash
+        run: test "${RESULT}" = PASS
+        env:
+          RESULT: ${{ steps.registry.outputs.result }}
+
       - name: A level the VSA does not reach fails, and says so
         id: wrong
         continue-on-error: true

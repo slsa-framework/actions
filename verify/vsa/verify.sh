@@ -25,6 +25,7 @@ if [ -n "${INPUT_COMMIT:-}" ]; then
 fi
 
 add_each --verifier "${INPUT_VERIFIER:-}"
+add_flag --verifiers "${INPUT_VERIFIERS:-}"
 add_bool --allow-unbound-verifier "${INPUT_ALLOW_UNBOUND_VERIFIER:-}"
 add_each --signer "${INPUT_SIGNER:-}"
 add_bool --require-signatures "${INPUT_REQUIRE_SIGNATURES:-}"

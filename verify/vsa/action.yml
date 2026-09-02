@@ -39,9 +39,17 @@ inputs:
     description: >
       Accepted verifier.id, optionally bound to the signer authorized to
       issue VSAs for it as id=<signer spec>, one per line (required). A
-      verifier with no signer is refused unless allow-unbound-verifier
-      or a wildcard signer is given.
+      bare id takes its signer from a registry file given with
+      verifiers; a verifier bound to no signer is refused unless
+      allow-unbound-verifier or a wildcard signer is given.
     required: true
+  verifiers:
+    description: >
+      Registry file or directory binding verifier ids to their signers
+      (see the verifier registry documentation); an accepted verifier
+      given without a signer takes the registry's.
+    required: false
+    default: ''
   allow-unbound-verifier:
     description: 'Accept a verifier that has no authorized signer, matching its id only'
     required: false
@@ -134,6 +142,7 @@ runs:
         INPUT_ARTIFACTS: ${{ inputs.artifacts }}
         INPUT_SUBJECTS: ${{ inputs.subjects }}
         INPUT_VERIFIER: ${{ inputs.verifier }}
+        INPUT_VERIFIERS: ${{ inputs.verifiers }}
         INPUT_ALLOW_UNBOUND_VERIFIER: ${{ inputs.allow-unbound-verifier }}
         INPUT_SIGNER: ${{ inputs.signer }}
         INPUT_REQUIRE_SIGNATURES: ${{ inputs.require-signatures }}
