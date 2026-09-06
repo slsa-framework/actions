@@ -1,0 +1,126 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: "Attest GitHub Actions Build"
+
+# Reusable workflow wrapping the attest/actions action. Callers add this as a
+# job in the workflow they want attested; the attester watches the caller's
+# run, waits for its sibling jobs and attests their artifacts. Because the
+# signing happens inside this workflow, the sigstore certificate identifies
+# the slsa-framework/actions workflow as the signer, giving the attestation a
+# trusted builder identity independent of the calling workflow.
+on:
+  workflow_call:
+    inputs:
+      watch-jobs:
+        type: string
+        description: "Comma-separated list of job names to watch (default: every job)"
+        required: false
+        default: ""
+      timeout:
+        type: string
+        description: "Max time to wait for the watched jobs (Go duration; 0 disables)"
+        required: false
+        default: "20m"
+      collect-artifacts:
+        type: boolean
+        description: "Collect the run's GitHub Actions artifacts as subjects"
+        required: false
+        default: true
+      expand-artifacts:
+        type: boolean
+        description: "Unpack artifact archives and attest one subject per contained file"
+        required: false
+        default: true
+      artifacts-filter:
+        type: string
+        description: "Comma-separated globs matched against artifact names"
+        required: false
+        default: ""
+      dependencies:
+        type: string
+        description: "Comma-separated extra resolved dependencies (resource descriptor shorthand)"
+        required: false
+        default: ""
+      subjects:
+        type: string
+        description: "Comma-separated extra subjects as algorithm:digest"
+        required: false
+        default: ""
+      build-from-source:
+        type: boolean
+        description: "Build slsa-attester from source (until releases are published)"
+        required: false
+        default: true
+      version:
+        type: string
+        description: "slsa-attester version to download (once releases are published)"
+        required: false
+        default: ""
+      artifact-name:
+        type: string
+        description: "Name of the workflow artifact the attestation is uploaded as"
+        required: false
+        default: "slsa-attestations"
+
+jobs:
+  attest:
+    permissions:
+      id-token: write # sigstore keyless signing
+      actions: read   # read the run's jobs and artifacts
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      # A reusable workflow runs in the caller's checkout, so it cannot call
+      # the actions of its own repository by a relative path. Check the
+      # repository this workflow file comes from out at its commit and call
+      # the action from there, so both are always pinned to the same release.
+      - name: Locate this workflow's repository
+        id: workflow
+        shell: bash
+        env:
+          JOB_WORKFLOW_REF: ${{ github.job_workflow_ref }}
+        run: |
+          # job_workflow_ref is owner/repo/.github/workflows/file.yml@ref
+          IFS=/ read -r owner repo _ <<< "${JOB_WORKFLOW_REF}"
+          echo "repository=${owner}/${repo}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out the SLSA actions
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.workflow.outputs.repository }}
+          ref: ${{ github.job_workflow_sha }}
+          path: .slsa-actions
+          persist-credentials: false
+
+      - name: Attest the run
+        id: attest
+        uses: ./.slsa-actions/attest/actions
+        with:
+          watch-jobs: ${{ inputs.watch-jobs }}
+          timeout: ${{ inputs.timeout }}
+          collect-artifacts: ${{ inputs.collect-artifacts }}
+          expand-artifacts: ${{ inputs.expand-artifacts }}
+          artifacts-filter: ${{ inputs.artifacts-filter }}
+          dependencies: ${{ inputs.dependencies }}
+          subjects: ${{ inputs.subjects }}
+          build-from-source: ${{ inputs.build-from-source }}
+          version: ${{ inputs.version }}
+
+      - name: Attestation summary
+        shell: bash
+        env:
+          ATTESTATION: ${{ steps.attest.outputs.attestation }}
+        run: |
+          {
+            echo "## SLSA Build Provenance"
+            echo '```json'
+            cat "${ATTESTATION}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ steps.attest.outputs.attestation }}

@@ -1,0 +1,189 @@
+# SPDX-FileCopyrightText: Copyright 2026 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: SLSA Build Provenance Attester
+
+description: >-
+  Watches a GitHub Actions workflow run, waits for its jobs to complete and
+  generates a signed SLSA build provenance attestation over the run's
+  artifacts using slsa-attester.
+
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  run-spec:
+    description: >-
+      Run to attest as github://owner/repo/runID. When empty the current run
+      is watched; the attester excludes its own job and waits for every
+      sibling job, so this action can run as the last step of the workflow
+      being attested.
+    required: false
+    default: ""
+
+  sign:
+    description: "Sign the attestation with the job's workload identity (sigstore)"
+    required: false
+    default: "true"
+
+  output:
+    description: "Path to write the provenance attestation"
+    required: false
+    default: "provenance.intoto.json"
+
+  watch-jobs:
+    description: "Comma-separated list of job names to watch (default: every job)"
+    required: false
+    default: ""
+
+  timeout:
+    description: "Max time to wait for the watched jobs (Go duration; 0 disables)"
+    required: false
+    default: "20m"
+
+  collect-artifacts:
+    description: "Collect the run's GitHub Actions artifacts as subjects"
+    required: false
+    default: "true"
+
+  expand-artifacts:
+    description: >-
+      Unpack artifact archives and attest one subject per contained file.
+      When false, each artifact archive is attested as a single subject.
+    required: false
+    default: "true"
+
+  artifacts-filter:
+    description: "Comma-separated globs matched against artifact names; only matches are attested"
+    required: false
+    default: ""
+
+  dependencies:
+    description: >-
+      Comma-separated extra resolved dependencies, each in slsa-attester
+      resource descriptor shorthand (eg 'name=dep,uri=git+https://...,sha256=...')
+    required: false
+    default: ""
+
+  subjects:
+    description: "Comma-separated extra subjects as algorithm:digest, eg sha256:<hex>"
+    required: false
+    default: ""
+
+  build-from-source:
+    description: "Build slsa-attester from source instead of downloading a release"
+    required: false
+    # TODO: flip to false and verify a pinned release once slsa-attester
+    # publishes releases with provenance.
+    default: "true"
+
+  version:
+    description: "slsa-attester version to download (once releases are published)"
+    required: false
+    default: ""
+
+outputs:
+  attestation:
+    description: "Path to the generated provenance attestation"
+    value: ${{ steps.attest.outputs.attestation }}
+
+runs:
+  using: composite
+  steps:
+    - id: check_source
+      if: inputs.build-from-source != 'true'
+      shell: bash
+      run: |
+        echo "::error::slsa-attester releases are not published yet; set build-from-source: true"
+        exit 1
+
+    - name: Check out slsa-attester
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: slsa-framework/slsa-attester
+        path: ${{ github.workspace }}/.slsa-attester/src
+        persist-credentials: false
+
+    - id: go_versions
+      uses: carabiner-dev/actions/go/versions@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        go-mod-path: ${{ github.workspace }}/.slsa-attester/src/go.mod
+
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: ${{ steps.go_versions.outputs.GO_VERSION_STABLE }}
+        cache-dependency-path: ${{ github.workspace }}/.slsa-attester/src/go.sum
+
+    - id: build_binary
+      name: Build slsa-attester
+      shell: bash
+      run: |
+        cd "${WORKSPACE}/.slsa-attester/src"
+        go build -o "${WORKSPACE}/.slsa-attester/slsa-attester" .
+        "${WORKSPACE}/.slsa-attester/slsa-attester" --version
+      env:
+        WORKSPACE: ${{ github.workspace }}
+
+    - id: attest
+      name: Watch the run and attest
+      shell: bash
+      # All context values are passed through the environment and quoted in
+      # the script to avoid shell injection.
+      run: |
+        set -euo pipefail
+
+        ARGS=(watch)
+        if [ -n "${RUN_SPEC}" ]; then
+          ARGS+=("${RUN_SPEC}")
+        fi
+        ARGS+=(
+          --sign="${SIGN}"
+          --output="${OUTPUT}"
+          --timeout="${TIMEOUT}"
+          --collect-artifacts="${COLLECT_ARTIFACTS}"
+          --expand-artifacts="${EXPAND_ARTIFACTS}"
+        )
+        if [ -n "${WATCH_JOBS}" ]; then
+          ARGS+=(--watch-jobs="${WATCH_JOBS}")
+        fi
+        if [ -n "${ARTIFACTS_FILTER}" ]; then
+          ARGS+=(--artifacts-filter="${ARTIFACTS_FILTER}")
+        fi
+        if [ -n "${DEPENDENCIES}" ]; then
+          IFS=',' read -ra DEPS <<< "${DEPENDENCIES}"
+          for dep in "${DEPS[@]}"; do
+            dep="$(echo "${dep}" | xargs)"
+            if [ -n "${dep}" ]; then
+              ARGS+=(--dependency="${dep}")
+            fi
+          done
+        fi
+        if [ -n "${SUBJECTS}" ]; then
+          IFS=',' read -ra SUBS <<< "${SUBJECTS}"
+          for sub in "${SUBS[@]}"; do
+            sub="$(echo "${sub}" | xargs)"
+            if [ -n "${sub}" ]; then
+              ARGS+=(--subject="${sub}")
+            fi
+          done
+        fi
+
+        echo "::group::Running slsa-attester watch"
+        "${WORKSPACE}/.slsa-attester/slsa-attester" "${ARGS[@]}"
+        echo "::endgroup::"
+
+        echo "attestation=${OUTPUT}" >> "${GITHUB_OUTPUT}"
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        WORKSPACE: ${{ github.workspace }}
+        RUN_SPEC: ${{ inputs.run-spec }}
+        SIGN: ${{ inputs.sign }}
+        OUTPUT: ${{ inputs.output }}
+        TIMEOUT: ${{ inputs.timeout }}
+        COLLECT_ARTIFACTS: ${{ inputs.collect-artifacts }}
+        EXPAND_ARTIFACTS: ${{ inputs.expand-artifacts }}
+        WATCH_JOBS: ${{ inputs.watch-jobs }}
+        ARTIFACTS_FILTER: ${{ inputs.artifacts-filter }}
+        DEPENDENCIES: ${{ inputs.dependencies }}
+        SUBJECTS: ${{ inputs.subjects }}
