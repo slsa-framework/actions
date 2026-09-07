@@ -26,7 +26,7 @@ jobs:
         run: echo "tag_name=${GITHUB_REF#refs/*/}" >> "$GITHUB_OUTPUT"
 
       - name: Publish Release
-        uses: kubernetes-sigs/release-actions/publish-release@a30d93cf2aa029e1e4c8a6c79f766aebf429fddb # v0.3.1
+        uses: kubernetes-sigs/release-actions/publish-release@b5b8280a60e6e20607f77068011269b982c60971 # v0.4.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
