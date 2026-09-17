@@ -16,9 +16,8 @@ inputs:
   run-spec:
     description: >-
       Run to attest as github://owner/repo/runID. When empty the current run
-      is watched; the attester excludes its own job and waits for every
-      sibling job, so this action can run as the last step of the workflow
-      being attested.
+      is watched; the attester excludes its own job — which must be dedicated
+      to attesting — and waits for every sibling job.
     required: false
     default: ""
 
@@ -55,7 +54,23 @@ inputs:
     default: "true"
 
   artifacts-filter:
-    description: "Comma-separated globs matched against artifact names; only matches are attested"
+    description: "Comma-separated globs matched against artifact and release asset names; only matches are attested"
+    required: false
+    default: ""
+
+  release:
+    description: >-
+      Also attest the assets of this release (tag) in the watched repository.
+      Use it when the run publishes its artifacts to a GitHub release (eg via
+      goreleaser) instead of the workflow artifact store.
+    required: false
+    default: ""
+
+  sboms:
+    description: >-
+      Comma-separated collector sources to fetch SBOMs from (eg 'fs:sboms/'
+      or 'release:owner/repo@v1.0.0'). The SBOMs' top-level elements are
+      attested as subjects; they must carry hashes.
     required: false
     default: ""
 
@@ -71,12 +86,31 @@ inputs:
     required: false
     default: ""
 
+  base64-subjects:
+    description: >-
+      Extra subjects as a base64-encoded checksums file in sha256sum format
+      (digest and name per line) — the same input slsa-github-generator's
+      generic generator accepted, eg "$(sha256sum artifact* | base64 -w0)".
+    required: false
+    default: ""
+
   build-from-source:
     description: "Build slsa-attester from source instead of downloading a release"
     required: false
     # TODO: flip to false and verify a pinned release once slsa-attester
     # publishes releases with provenance.
     default: "true"
+
+  unsafe-shared-job:
+    description: >-
+      Attest even when the job contains other steps. UNSAFE: steps that run
+      earlier in the job can tamper with the runner (replace the attester,
+      poison the tool cache) and forge the attestation, and every step in the
+      job shares the OIDC identity the attestation is signed with. The
+      attester refuses shared jobs by default; give it a job of its own
+      instead.
+    required: false
+    default: "false"
 
   version:
     description: "slsa-attester version to download (once releases are published)"
@@ -101,7 +135,7 @@ runs:
     - name: Check out slsa-attester
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: slsa-framework/slsa-attester
+        repository: slsa-framework/attester
         path: ${{ github.workspace }}/.slsa-attester/src
         persist-credentials: false
 
@@ -147,6 +181,21 @@ runs:
         if [ -n "${WATCH_JOBS}" ]; then
           ARGS+=(--watch-jobs="${WATCH_JOBS}")
         fi
+        if [ "${UNSAFE_SHARED_JOB}" = "true" ]; then
+          ARGS+=(--allow-shared-job)
+        fi
+        if [ -n "${RELEASE}" ]; then
+          ARGS+=(--release="${RELEASE}")
+        fi
+        if [ -n "${SBOMS}" ]; then
+          IFS=',' read -ra BOMS <<< "${SBOMS}"
+          for bomsrc in "${BOMS[@]}"; do
+            bomsrc="$(echo "${bomsrc}" | xargs)"
+            if [ -n "${bomsrc}" ]; then
+              ARGS+=(--sbom="${bomsrc}")
+            fi
+          done
+        fi
         if [ -n "${ARTIFACTS_FILTER}" ]; then
           ARGS+=(--artifacts-filter="${ARTIFACTS_FILTER}")
         fi
@@ -158,6 +207,11 @@ runs:
               ARGS+=(--dependency="${dep}")
             fi
           done
+        fi
+        if [ -n "${BASE64_SUBJECTS}" ]; then
+          CHECKSUMS_FILE="${RUNNER_TEMP}/subjects.checksums"
+          echo "${BASE64_SUBJECTS}" | base64 -d > "${CHECKSUMS_FILE}"
+          ARGS+=(--checksums="${CHECKSUMS_FILE}")
         fi
         if [ -n "${SUBJECTS}" ]; then
           IFS=',' read -ra SUBS <<< "${SUBJECTS}"
@@ -184,6 +238,10 @@ runs:
         COLLECT_ARTIFACTS: ${{ inputs.collect-artifacts }}
         EXPAND_ARTIFACTS: ${{ inputs.expand-artifacts }}
         WATCH_JOBS: ${{ inputs.watch-jobs }}
+        UNSAFE_SHARED_JOB: ${{ inputs.unsafe-shared-job }}
+        RELEASE: ${{ inputs.release }}
+        SBOMS: ${{ inputs.sboms }}
         ARTIFACTS_FILTER: ${{ inputs.artifacts-filter }}
         DEPENDENCIES: ${{ inputs.dependencies }}
         SUBJECTS: ${{ inputs.subjects }}
+        BASE64_SUBJECTS: ${{ inputs.base64-subjects }}

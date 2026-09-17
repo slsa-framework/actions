@@ -34,7 +34,17 @@ on:
         default: true
       artifacts-filter:
         type: string
-        description: "Comma-separated globs matched against artifact names"
+        description: "Comma-separated globs matched against artifact and release asset names"
+        required: false
+        default: ""
+      release:
+        type: string
+        description: "Also attest the assets of this release (tag) in the watched repository"
+        required: false
+        default: ""
+      sboms:
+        type: string
+        description: "Comma-separated collector sources to fetch SBOMs from; their top-level elements are attested"
         required: false
         default: ""
       dependencies:
@@ -45,6 +55,11 @@ on:
       subjects:
         type: string
         description: "Comma-separated extra subjects as algorithm:digest"
+        required: false
+        default: ""
+      base64-subjects:
+        type: string
+        description: "Extra subjects as a base64-encoded sha256sum-format checksums file (slsa-github-generator compatible)"
         required: false
         default: ""
       build-from-source:
@@ -102,8 +117,11 @@ jobs:
           collect-artifacts: ${{ inputs.collect-artifacts }}
           expand-artifacts: ${{ inputs.expand-artifacts }}
           artifacts-filter: ${{ inputs.artifacts-filter }}
+          release: ${{ inputs.release }}
+          sboms: ${{ inputs.sboms }}
           dependencies: ${{ inputs.dependencies }}
           subjects: ${{ inputs.subjects }}
+          base64-subjects: ${{ inputs.base64-subjects }}
           build-from-source: ${{ inputs.build-from-source }}
           version: ${{ inputs.version }}
 
