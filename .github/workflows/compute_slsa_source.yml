@@ -35,20 +35,42 @@ jobs:
     # the actions of its own repository by a relative path. Check the
     # repository this workflow file comes from out at its commit and call
     # the action from there, so both are always pinned to the same release.
+    #
+    # github.job_workflow_ref and github.job_workflow_sha are not reliably
+    # populated in the context for cross-repository calls, but they are
+    # always present as claims in the job's OIDC token, so the identity is
+    # read from there (the same workaround slsa-github-generator used).
+    # The token comes from the runner's own endpoint, is used only to read
+    # this job's own identity, and is never printed.
     - name: Locate this workflow's repository
       id: workflow
       shell: bash
-      env:
-        JOB_WORKFLOW_REF: ${{ github.job_workflow_ref }}
       run: |
+        set -euo pipefail
+        resp="$(curl -sSf -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=slsa-framework-actions-locate")"
+        payload="$(jq -r '.value' <<<"${resp}" | cut -d. -f2 | tr '_-' '/+')"
+        case $(( ${#payload} % 4 )) in
+          2) payload="${payload}==" ;;
+          3) payload="${payload}=" ;;
+        esac
+        claims="$(base64 -d <<<"${payload}")"
+        job_workflow_ref="$(jq -r '.job_workflow_ref' <<<"${claims}")"
+        job_workflow_sha="$(jq -r '.job_workflow_sha' <<<"${claims}")"
         # job_workflow_ref is owner/repo/.github/workflows/file.yml@ref
-        IFS=/ read -r owner repo _ <<< "${JOB_WORKFLOW_REF}"
-        echo "repository=${owner}/${repo}" >> "${GITHUB_OUTPUT}"
+        repository="${job_workflow_ref%%/.github/*}"
+        if [ -z "${repository}" ] || [ "${repository}" = "null" ] || \
+           [ -z "${job_workflow_sha}" ] || [ "${job_workflow_sha}" = "null" ]; then
+          echo "::error::could not determine the workflow repository from the OIDC token claims"
+          exit 1
+        fi
+        echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
+        echo "sha=${job_workflow_sha}" >> "${GITHUB_OUTPUT}"
     - name: Check out the SLSA actions
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: ${{ steps.workflow.outputs.repository }}
-        ref: ${{ github.job_workflow_sha }}
+        ref: ${{ steps.workflow.outputs.sha }}
         path: .slsa-actions
         persist-credentials: false
     - name: prov
