@@ -4,6 +4,7 @@ GitHub Actions for producing and verifying SLSA attestations.
 
 | Action | Purpose |
 |---|---|
+| [`attest/actions`](attest/actions) | Watches a GitHub Actions run and attests the artifacts it produced, with [slsa-attester](https://github.com/slsa-framework/attester). Use it through the [`attest_actions.yml`](.github/workflows/attest_actions.yml) reusable workflow, which signs with this repository's trusted identity |
 | [`slsa_with_provenance`](slsa_with_provenance) | Generates SLSA source provenance for a push, with the SLSA Source Tool |
 | [`store_note`](store_note), [`get_note`](get_note) | Store and read attestations in the commit's git notes |
 | [`install/verifier`](install/verifier) | Installs [slsa-verifier](https://github.com/slsa-framework/verifier), verified against its own release provenance |

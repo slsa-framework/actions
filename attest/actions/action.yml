@@ -95,10 +95,20 @@ inputs:
     default: ""
 
   build-from-source:
-    description: "Build slsa-attester from source instead of downloading a release"
+    description: >-
+      Build slsa-attester from the tip of its repository instead of
+      downloading and verifying a released binary. For development; the
+      built binary is unpinned and unverified.
     required: false
-    # TODO: flip to false and verify a pinned release once slsa-attester
-    # publishes releases with provenance.
+    # TODO: flip to false once a stable slsa-attester release is out.
+    default: "true"
+
+  verify:
+    description: >-
+      Verify the downloaded slsa-attester release against the SLSA
+      provenance published with it before running it. Only disable to
+      use a release that published no provenance.
+    required: false
     default: "true"
 
   unsafe-shared-job:
@@ -113,9 +123,9 @@ inputs:
     default: "false"
 
   version:
-    description: "slsa-attester version to download (once releases are published)"
+    description: "slsa-attester release to download when not building from source"
     required: false
-    default: ""
+    default: "v0.1.0-rc.3"
 
 outputs:
   attestation:
@@ -125,14 +135,107 @@ outputs:
 runs:
   using: composite
   steps:
-    - id: check_source
+    # Download a released slsa-attester and the provenance published with
+    # it. Inputs reach the script through the environment and are
+    # validated before use.
+    - id: download
       if: inputs.build-from-source != 'true'
       shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        VERIFY: ${{ inputs.verify }}
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
       run: |
-        echo "::error::slsa-attester releases are not published yet; set build-from-source: true"
-        exit 1
+        set -euo pipefail
+        fail() { echo "::error::$*" >&2; exit 1; }
+
+        VERSION="${VERSION:-v0.1.0-rc.3}"
+        case "${VERSION}" in
+          v[0-9]*) ;;
+          *) fail "version must be a release tag (vX.Y.Z), got: ${VERSION}" ;;
+        esac
+
+        case "${RUNNER_OS_NAME}" in
+          Linux)   os="linux" ;;
+          macOS)   os="darwin" ;;
+          Windows) os="windows" ;;
+          *) fail "unsupported OS: ${RUNNER_OS_NAME}" ;;
+        esac
+        case "${RUNNER_ARCH_NAME}" in
+          X64)   arch="amd64" ;;
+          ARM64) arch="arm64" ;;
+          *) fail "unsupported architecture: ${RUNNER_ARCH_NAME}" ;;
+        esac
+        ext=""
+        [ "${os}" = "windows" ] && ext=".exe"
+
+        repo="slsa-framework/attester"
+        work="${RUNNER_TEMP}/slsa-attester-release"
+        mkdir -p "${work}"
+        release_file="slsa-attester-${VERSION}-${os}-${arch}${ext}"
+        binary="${work}/${release_file}"
+
+        echo "Downloading ${release_file}"
+        curl -sSfL --retry 3 --retry-all-errors --retry-delay 2           -o "${binary}"           "https://github.com/${repo}/releases/download/${VERSION}/${release_file}"           || fail "downloading ${release_file}"
+        chmod 0755 "${binary}"
+
+        attestations=""
+        if [ "${VERIFY}" = "true" ]; then
+          attestations="${work}/attestations.jsonl"
+          curl -sSfL --retry 3 --retry-all-errors --retry-delay 2             -o "${attestations}"             "https://github.com/${repo}/releases/download/${VERSION}/attestations.jsonl"             || fail "downloading the release provenance"
+        else
+          echo "::warning::Skipping provenance verification of ${release_file}"
+        fi
+
+        # The release provenance names the attester's release workflow as
+        # the builder and is signed by the attest_actions reusable
+        # workflow of this repository (the observer). Regexp
+        # metacharacters are escaped and the spec anchored.
+        # TODO: pin the observer to release tags once this repository
+        # tags releases.
+        builder_id="https://github.com/${repo}/.github/workflows/release.yaml"
+        observer="https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml"
+        escaped_observer="$(printf '%s' "${observer}" | sed 's/[.+]/\\&/g')"
+        signer="sigstore(regexp)::https://token\.actions\.githubusercontent\.com::^${escaped_observer}@.*$"
+
+        {
+          echo "binary=${binary}"
+          echo "attestations=${attestations}"
+          echo "builder-id=${builder_id}"
+          echo "signer=${signer}"
+        } >> "${GITHUB_OUTPUT}"
+
+    # The release is verified before it runs: the provenance published
+    # with it must cover the binary, name the attester's release workflow
+    # as the builder, and be signed by the attest_actions observer.
+    - name: Verify the attester release
+      if: inputs.build-from-source != 'true' && inputs.verify == 'true'
+      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      with:
+        subject: ${{ steps.download.outputs.binary }}
+        collector: jsonl:${{ steps.download.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        context: "builderId:${{ steps.download.outputs.builder-id }}"
+        signer: ${{ steps.download.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    # Only a verified binary lands on the path the attest step executes.
+    - id: install
+      if: inputs.build-from-source != 'true'
+      shell: bash
+      env:
+        BINARY: ${{ steps.download.outputs.binary }}
+        WORKSPACE: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${WORKSPACE}/.slsa-attester"
+        cp "${BINARY}" "${WORKSPACE}/.slsa-attester/slsa-attester"
+        "${WORKSPACE}/.slsa-attester/slsa-attester" --version
 
     - name: Check out slsa-attester
+      if: inputs.build-from-source == 'true'
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: slsa-framework/attester
@@ -140,16 +243,19 @@ runs:
         persist-credentials: false
 
     - id: go_versions
+      if: inputs.build-from-source == 'true'
       uses: carabiner-dev/actions/go/versions@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
       with:
         go-mod-path: ${{ github.workspace }}/.slsa-attester/src/go.mod
 
-    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+    - if: inputs.build-from-source == 'true'
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: ${{ steps.go_versions.outputs.GO_VERSION_STABLE }}
         cache-dependency-path: ${{ github.workspace }}/.slsa-attester/src/go.sum
 
     - id: build_binary
+      if: inputs.build-from-source == 'true'
       name: Build slsa-attester
       shell: bash
       run: |

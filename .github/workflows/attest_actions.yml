@@ -64,14 +64,19 @@ on:
         default: ""
       build-from-source:
         type: boolean
-        description: "Build slsa-attester from source (until releases are published)"
+        description: "Build slsa-attester from the tip of its repository (development; unpinned and unverified)"
         required: false
         default: true
       version:
         type: string
-        description: "slsa-attester version to download (once releases are published)"
+        description: "slsa-attester release to download when not building from source"
         required: false
         default: ""
+      verify:
+        type: boolean
+        description: "Verify the downloaded slsa-attester release against its provenance before running it"
+        required: false
+        default: true
       artifact-name:
         type: string
         description: "Name of the workflow artifact the attestation is uploaded as"
@@ -146,6 +151,7 @@ jobs:
           base64-subjects: ${{ inputs.base64-subjects }}
           build-from-source: ${{ inputs.build-from-source }}
           version: ${{ inputs.version }}
+          verify: ${{ inputs.verify }}
 
       - name: Attestation summary
         shell: bash

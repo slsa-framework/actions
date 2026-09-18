@@ -14,6 +14,12 @@ certificate identifies the `slsa-framework/actions` workflow as the signer —
 the attestation carries a builder identity independent of the calling
 workflow, the way slsa-github-generator worked.
 
+With `build-from-source: false` the action downloads a released
+slsa-attester binary and verifies it against the SLSA provenance published
+with its release before running it: the provenance must cover the binary,
+name the attester's release workflow as the builder, and be signed by this
+repository's `attest_actions` workflow, which observed that release.
+
 ```yaml
 jobs:
   build:
@@ -84,8 +90,9 @@ from a shared job proves nothing, since the build could have forged it.
 | `dependencies` | none | Extra resolved dependencies (resource descriptor shorthand) |
 | `subjects` | none | Extra subjects as `algorithm:digest` |
 | `base64-subjects` | none | Base64-encoded sha256sum-format checksums file (slsa-github-generator compatible) |
-| `build-from-source` | `true` | Build slsa-attester from source (until releases are published) |
-| `version` | none | slsa-attester release to download (once available) |
+| `build-from-source` | `true` | Build slsa-attester from its repository tip (development; unpinned and unverified) |
+| `version` | `v0.1.0-rc.3` | slsa-attester release to download when not building from source |
+| `verify` | `true` | Verify the downloaded release against its published provenance before running it |
 | `unsafe-shared-job` | `false` | Attest even when other steps already ran in this job (unsafe; see above) |
 
 The subjects declared with `subjects` use the same `algorithm:digest` syntax
