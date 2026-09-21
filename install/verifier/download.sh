@@ -81,14 +81,22 @@ if command -v cygpath >/dev/null 2>&1; then
 fi
 
 # The provenance must name the repository's release workflow as the
-# builder and be signed by the same workflow running at the requested
-# tag. Regexp metacharacters in the repo and tag are escaped; the spec
-# is anchored so a name sharing a prefix does not match.
+# builder. Two signers prove it, depending on the release: early
+# releases were signed by the release workflow itself running at the
+# requested tag; newer ones are signed by the SLSA attester's
+# attest_actions reusable workflow, which observed the release run
+# (the certificate's build config extension names the release
+# workflow). Regexp metacharacters are escaped and the spec anchored
+# so a name sharing a prefix does not match.
+# TODO: pin the observer to release tags once slsa-framework/actions
+# tags releases.
 workflow="https://github.com/${REPO}/${RELEASE_WORKFLOW}"
+observer="https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml"
 escaped_workflow="$(printf '%s' "$workflow" | sed 's/[.+]/\\&/g')"
+escaped_observer="$(printf '%s' "$observer" | sed 's/[.+]/\\&/g')"
 escaped_version="$(printf '%s' "$VERSION" | sed 's/[.+]/\\&/g')"
 escaped_issuer="$(printf '%s' "$ISSUER" | sed 's/[.+]/\\&/g')"
-signer="sigstore(regexp)::${escaped_issuer}::^${escaped_workflow}@refs/tags/${escaped_version}\$"
+signer="sigstore(regexp)::${escaped_issuer}::^(${escaped_workflow}@refs/tags/${escaped_version}|${escaped_observer}@.*)\$"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
