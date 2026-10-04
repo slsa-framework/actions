@@ -85,7 +85,15 @@ runs:
         fi
         mkdir -p "${WORKSPACE}/.bin/"
         curl -fLo "${WORKSPACE}/.bin/sourcetool" "https://github.com/slsa-framework/source-tool/releases/download/${VERSION}/sourcetool-${VERSION}-linux-amd64"
-        curl -fLo "${WORKSPACE}/.bin/sourcetool.intoto.jsonl" "https://github.com/slsa-framework/source-tool/releases/download/${VERSION}/sourcetool.intoto.jsonl"
+        # The release provenance: attestations.intoto.jsonl on current
+        # releases. Releases up to v0.7.1 published it as
+        # sourcetool.intoto.jsonl, so that name is tried when the current
+        # one is not there.
+        base="https://github.com/slsa-framework/source-tool/releases/download/${VERSION}"
+        if ! curl -fsLo "${WORKSPACE}/.bin/attestations.intoto.jsonl" "${base}/attestations.intoto.jsonl" 2>/dev/null; then
+          echo "No attestations.intoto.jsonl on ${VERSION}; trying the earlier name sourcetool.intoto.jsonl"
+          curl -fLo "${WORKSPACE}/.bin/attestations.intoto.jsonl" "${base}/sourcetool.intoto.jsonl"
+        fi
 
         # TODO verify binary
         chmod 0755 "${WORKSPACE}/.bin/sourcetool"
@@ -101,7 +109,7 @@ runs:
         AMPEL_BUILDERID: "https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml"
       with:
         subject: ${{ github.workspace }}/.bin/sourcetool
-        collector: "jsonl:${{ github.workspace }}/.bin/sourcetool.intoto.jsonl"
+        collector: "jsonl:${{ github.workspace }}/.bin/attestations.intoto.jsonl"
         policy: "git+https://github.com/carabiner-dev/policies#slsa/slsa-builder-id.json"
         # Two signers are accepted (comma separated): older sourcetool
         # releases were signed by the release workflow itself, newer ones
@@ -166,7 +174,7 @@ runs:
       run: "${GITHUB_ACTION_PATH}/../verify/build/verify.sh"
       env:
         VERIFIER: ${{ steps.download_verifier.outputs.binary }}
-        INPUT_ATTESTATION: ${{ github.workspace }}/.bin/sourcetool.intoto.jsonl
+        INPUT_ATTESTATION: ${{ github.workspace }}/.bin/attestations.intoto.jsonl
         INPUT_ARTIFACTS: ${{ github.workspace }}/.bin/sourcetool
         INPUT_EXPECTED_SOURCE: github.com/slsa-framework/source-tool
         INPUT_TRUSTED_BUILDERS: https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@refs/tags/${{ inputs.version }}
