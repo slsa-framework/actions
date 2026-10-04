@@ -64,7 +64,7 @@ runs:
       with:
         subject: ${{ steps.download.outputs.binary }}
         collector: jsonl:${{ steps.download.outputs.attestations }}
-        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/builderid-base.json
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/slsa-builder-id.json
         context: "builderId:${{ steps.download.outputs.builder-id }}"
         signer: ${{ steps.download.outputs.signer }}
         attest: "false"

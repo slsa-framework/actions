@@ -102,7 +102,7 @@ runs:
       with:
         subject: ${{ github.workspace }}/.bin/sourcetool
         collector: "jsonl:${{ github.workspace }}/.bin/sourcetool.intoto.jsonl"
-        policy: "git+https://github.com/carabiner-dev/policies#slsa/builderid-base.json"
+        policy: "git+https://github.com/carabiner-dev/policies#slsa/slsa-builder-id.json"
         # Two signers are accepted (comma separated): older sourcetool
         # releases were signed by the release workflow itself, newer ones
         # are signed by the SLSA attester's attest_actions workflow.
