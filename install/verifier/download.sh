@@ -66,10 +66,17 @@ log "Downloading ${release_file}"
 download "https://github.com/${REPO}/releases/download/${VERSION}/${release_file}" "$binary"
 chmod 0755 "$binary"
 
+# The release provenance: attestations.intoto.jsonl on current releases.
+# Releases up to v0.1.0 published it as attestations.jsonl, so that name
+# is tried when the current one is not there.
 attestations=""
 if [ "$VERIFY" = "true" ]; then
-  attestations="${work}/attestations.jsonl"
-  download "https://github.com/${REPO}/releases/download/${VERSION}/attestations.jsonl" "$attestations"
+  attestations="${work}/attestations.intoto.jsonl"
+  base="https://github.com/${REPO}/releases/download/${VERSION}"
+  if ! curl -sSfL --retry 3 --retry-all-errors --retry-delay 2 -o "$attestations" "${base}/attestations.intoto.jsonl" 2>/dev/null; then
+    log "No attestations.intoto.jsonl on ${VERSION}; trying the earlier name attestations.jsonl"
+    download "${base}/attestations.jsonl" "$attestations"
+  fi
 else
   log "::warning::Skipping provenance verification of ${release_file}"
 fi

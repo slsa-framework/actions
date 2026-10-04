@@ -43,9 +43,12 @@ jobs:
       - name: Verifying a release with the installed verifier
         shell: bash
         run: |
-          curl -sSfL -o attestations.jsonl \
-            "https://github.com/slsa-framework/verifier/releases/download/${VERSION}/attestations.jsonl"
-          slsa-verifier build attestations.jsonl \
+          # Current releases publish attestations.intoto.jsonl; up to v0.1.0
+          # the file was attestations.jsonl.
+          base="https://github.com/slsa-framework/verifier/releases/download/${VERSION}"
+          curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.intoto.jsonl" \
+            || curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.jsonl"
+          slsa-verifier build attestations.intoto.jsonl \
             --require-signatures \
             --signer "sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/verifier/.github/workflows/release.yaml@refs/tags/${VERSION}" \
             --param expected_source:github.com/slsa-framework/verifier \
@@ -83,7 +86,10 @@ jobs:
             *) echo "::error::unsupported runner ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
           esac
           base="https://github.com/slsa-framework/verifier/releases/download/${VERSION}"
-          curl -sSfL -o attestations.jsonl "${base}/attestations.jsonl"
+          # Current releases publish attestations.intoto.jsonl; up to v0.1.0
+          # the file was attestations.jsonl.
+          curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.intoto.jsonl" \
+            || curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.jsonl"
           curl -sSfL -o "${file}" "${base}/${file}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "artifact=${file}" >> "$GITHUB_OUTPUT"
@@ -91,7 +97,7 @@ jobs:
       - id: verify
         uses: ./verify/build
         with:
-          attestation: attestations.jsonl
+          attestation: attestations.intoto.jsonl
           artifacts: ${{ steps.release.outputs.artifact }}
           expected-source: github.com/slsa-framework/verifier
           trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/release.yaml
@@ -115,7 +121,7 @@ jobs:
         continue-on-error: true
         uses: ./verify/build
         with:
-          attestation: attestations.jsonl
+          attestation: attestations.intoto.jsonl
           expected-source: github.com/slsa-framework/verifier
           trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/go-build-and-test.yaml
           skip-buildtype-checks: true

@@ -180,10 +180,20 @@ runs:
         curl -sSfL --retry 3 --retry-all-errors --retry-delay 2           -o "${binary}"           "https://github.com/${repo}/releases/download/${VERSION}/${release_file}"           || fail "downloading ${release_file}"
         chmod 0755 "${binary}"
 
+        # The release provenance: attestations.intoto.jsonl on current
+        # releases. Releases up to v0.1.0 published it as attestations.jsonl,
+        # so that name is tried when the current one is not there.
         attestations=""
         if [ "${VERIFY}" = "true" ]; then
-          attestations="${work}/attestations.jsonl"
-          curl -sSfL --retry 3 --retry-all-errors --retry-delay 2             -o "${attestations}"             "https://github.com/${repo}/releases/download/${VERSION}/attestations.jsonl"             || fail "downloading the release provenance"
+          attestations="${work}/attestations.intoto.jsonl"
+          base="https://github.com/${repo}/releases/download/${VERSION}"
+          if ! curl -sSfL --retry 3 --retry-all-errors --retry-delay 2 \
+            -o "${attestations}" "${base}/attestations.intoto.jsonl" 2>/dev/null; then
+            echo "No attestations.intoto.jsonl on ${VERSION}; trying the earlier name attestations.jsonl"
+            curl -sSfL --retry 3 --retry-all-errors --retry-delay 2 \
+              -o "${attestations}" "${base}/attestations.jsonl" \
+              || fail "downloading the release provenance"
+          fi
         else
           echo "::warning::Skipping provenance verification of ${release_file}"
         fi

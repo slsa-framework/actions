@@ -16,7 +16,7 @@ trusting it.
 The action does not trust a download because it came from GitHub. Before
 installing, the [AMPEL](https://github.com/carabiner-dev/ampel) policy
 engine — bootstrapped by its own checksum-pinned installer — evaluates
-the release's published `attestations.jsonl` against a pinned policy,
+the release's published `attestations.intoto.jsonl` against a pinned policy,
 requiring that
 
 - the binary is a subject of the provenance,
