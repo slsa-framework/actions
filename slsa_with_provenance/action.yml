@@ -32,8 +32,13 @@ runs:
         exit 1
       shell: bash
 
-    # This needs to persis its credentials to store the attestations
+    # This needs to persis its credentials to store the attestations.
+    # The workspace is not cleaned: when the action is called from a local
+    # checkout inside the workspace (as compute_slsa_source.yml does),
+    # cleaning would delete the action itself and fail its post step.
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        clean: false
 
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       id: checkout_sourcetool_code

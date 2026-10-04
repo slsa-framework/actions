@@ -66,6 +66,13 @@ jobs:
         fi
         echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
         echo "sha=${job_workflow_sha}" >> "${GITHUB_OUTPUT}"
+    # The caller's repository is checked out first: a first checkout into
+    # the workspace root wipes it, which would delete the SLSA actions
+    # below and fail the provenance action's post step. The credentials
+    # are persisted as the provenance action needs them to store the
+    # attestations.
+    - name: Check out the repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Check out the SLSA actions
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
