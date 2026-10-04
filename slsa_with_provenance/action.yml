@@ -107,7 +107,73 @@ runs:
         # releases were signed by the release workflow itself, newer ones
         # are signed by the SLSA attester's attest_actions workflow.
         signer: "sigstore(regexp)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@.*,sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main"
-    
+
+    # The downloaded release is also verified with slsa-verifier, the way
+    # this repository's verify/build action does it, for sourcetool v0.7.1
+    # and above: from that release on the provenance is produced by the
+    # SLSA attester (the watcher build type), names the release workflow
+    # at the release tag as the builder and is signed by the attester's
+    # attest_actions workflow, which is what the verifier checks. Earlier
+    # releases attested their own builds in a form it does not verify.
+    - id: slsa_verifier_gate
+      name: Decide whether slsa-verifier applies
+      if: inputs.build-from-source == 'false'
+      shell: bash
+      run: |
+        VERIFY="false"
+        MIN_VERIFY_VERSION="v0.7.1"
+        if [ "$(printf '%s\n%s\n' "$MIN_VERIFY_VERSION" "${VERSION}" | sort -V | head -n1)" = "$MIN_VERIFY_VERSION" ]; then
+          VERIFY="true"
+        else
+          echo "sourcetool ${VERSION} predates ${MIN_VERIFY_VERSION}: not verified with slsa-verifier"
+        fi
+        echo "verify=${VERIFY}" >> "$GITHUB_OUTPUT"
+      env:
+        VERSION: ${{ inputs.version }}
+
+    # The verifier release is itself verified before it is trusted, as
+    # verify/build does: the scripts are the sibling actions' own, reached
+    # from this action's path, since a composite action cannot call a
+    # sibling action by a relative path.
+    - id: download_verifier
+      if: steps.slsa_verifier_gate.outputs.verify == 'true'
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/../install/verifier/download.sh"
+      env:
+        VERSION: v0.1.0-alpha.5
+        REPO: slsa-framework/verifier
+        VERIFY: "true"
+
+    - name: Verify the slsa-verifier release provenance
+      if: steps.slsa_verifier_gate.outputs.verify == 'true'
+      uses: carabiner-dev/actions/ampel/verify@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      with:
+        subject: ${{ steps.download_verifier.outputs.binary }}
+        collector: jsonl:${{ steps.download_verifier.outputs.attestations }}
+        policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/slsa-builder-id.json
+        context: "builderId:${{ steps.download_verifier.outputs.builder-id }}"
+        signer: ${{ steps.download_verifier.outputs.signer }}
+        attest: "false"
+        results: summary
+
+    # The release provenance must be about the downloaded binary, name the
+    # release workflow at the requested tag as the builder, be signed by
+    # the SLSA attester, and reach build level 3.
+    - id: verify_binary_slsa
+      name: Verify the sourcetool release with slsa-verifier
+      if: steps.slsa_verifier_gate.outputs.verify == 'true'
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/../verify/build/verify.sh"
+      env:
+        VERIFIER: ${{ steps.download_verifier.outputs.binary }}
+        INPUT_ATTESTATION: ${{ github.workspace }}/.bin/sourcetool.intoto.jsonl
+        INPUT_ARTIFACTS: ${{ github.workspace }}/.bin/sourcetool
+        INPUT_EXPECTED_SOURCE: github.com/slsa-framework/source-tool
+        INPUT_TRUSTED_BUILDERS: https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@refs/tags/${{ inputs.version }}
+        INPUT_SIGNER: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main
+        INPUT_REQUIRE_SIGNATURES: "true"
+        INPUT_LEVEL: "3"
+
     # Attestations are pushed to the repository's git notes when sourcetool
     # supports it: v0.7.0 and above or any build from source.
     - id: configure_push
