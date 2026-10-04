@@ -125,7 +125,7 @@ inputs:
   version:
     description: "slsa-attester release to download when not building from source"
     required: false
-    default: "v0.1.0-rc.3"
+    default: "v0.1.0"
 
 outputs:
   attestation:
@@ -150,7 +150,7 @@ runs:
         set -euo pipefail
         fail() { echo "::error::$*" >&2; exit 1; }
 
-        VERSION="${VERSION:-v0.1.0-rc.3}"
+        VERSION="${VERSION:-v0.1.0}"
         case "${VERSION}" in
           v[0-9]*) ;;
           *) fail "version must be a release tag (vX.Y.Z), got: ${VERSION}" ;;

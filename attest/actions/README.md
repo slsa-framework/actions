@@ -91,7 +91,7 @@ from a shared job proves nothing, since the build could have forged it.
 | `subjects` | none | Extra subjects as `algorithm:digest` |
 | `base64-subjects` | none | Base64-encoded sha256sum-format checksums file (slsa-github-generator compatible) |
 | `build-from-source` | `true` | Build slsa-attester from its repository tip (development; unpinned and unverified) |
-| `version` | `v0.1.0-rc.3` | slsa-attester release to download when not building from source |
+| `version` | `v0.1.0` | slsa-attester release to download when not building from source |
 | `verify` | `true` | Verify the downloaded release against its published provenance before running it |
 | `unsafe-shared-job` | `false` | Attest even when other steps already ran in this job (unsafe; see above) |
 
