@@ -17,7 +17,7 @@
 # requested tag).
 set -euo pipefail
 
-DEFAULT_VERSION="v0.1.0-alpha.1"
+DEFAULT_VERSION="v0.1.0"
 RELEASE_WORKFLOW=".github/workflows/release.yaml"
 ISSUER="https://token.actions.githubusercontent.com"
 

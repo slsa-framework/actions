@@ -13,7 +13,7 @@ inputs:
   version:
     description: 'slsa-verifier release to install, e.g. v0.1.0'
     required: false
-    default: 'v0.1.0-alpha.1'
+    default: 'v0.1.0'
   install-dir:
     description: 'Directory to install into (the binary lands in its bin/)'
     required: false

@@ -74,7 +74,7 @@ jobs:
         id: release
         shell: bash
         run: |
-          VERSION=v0.1.0-alpha.1
+          VERSION=v0.1.0
           case "${RUNNER_OS}-${RUNNER_ARCH}" in
             Linux-X64) file="slsa-verifier-${VERSION}-linux-amd64" ;;
             Linux-ARM64) file="slsa-verifier-${VERSION}-linux-arm64" ;;

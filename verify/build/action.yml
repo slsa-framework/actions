@@ -109,7 +109,7 @@ inputs:
   version:
     description: 'slsa-verifier release to use'
     required: false
-    default: 'v0.1.0-alpha.5'
+    default: 'v0.1.0'
   repo:
     description: 'GitHub repository publishing the slsa-verifier releases'
     required: false
