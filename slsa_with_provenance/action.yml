@@ -98,7 +98,10 @@ runs:
         subject: ${{ github.workspace }}/.bin/sourcetool
         collector: "jsonl:${{ github.workspace }}/.bin/sourcetool.intoto.jsonl"
         policy: "git+https://github.com/carabiner-dev/policies#slsa/builderid-base.json"
-        signer: "sigstore(regexp)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@.*"
+        # Two signers are accepted (comma separated): older sourcetool
+        # releases were signed by the release workflow itself, newer ones
+        # are signed by the SLSA attester's attest_actions workflow.
+        signer: "sigstore(regexp)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@.*,sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main"
     
     # Attestations are pushed to the repository's git notes when sourcetool
     # supports it: v0.7.0 and above or any build from source.
