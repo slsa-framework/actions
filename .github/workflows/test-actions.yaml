@@ -48,14 +48,24 @@ jobs:
           base="https://github.com/slsa-framework/verifier/releases/download/${VERSION}"
           curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.intoto.jsonl" \
             || curl -sSfL -o attestations.intoto.jsonl "${base}/attestations.jsonl"
+          
+          # The verification of the verifier binary:
+          # - Releases of the verifier are signed by the SLSA build attester 
+          #   observing the release workflow's run, the signer identity proves the
+          #   attester signed.
+          # - expected_source checks the certificate's source repository extension
+          #   that names the verifier's repo
+          # - trusted_builders lists the build config extension names its release
+          #   workflow.
           slsa-verifier build attestations.intoto.jsonl \
             --require-signatures \
-            --signer "sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/verifier/.github/workflows/release.yaml@refs/tags/${VERSION}" \
+            --signer "${SIGNER}" \
             --param expected_source:github.com/slsa-framework/verifier \
             --param "trusted_builders:[https://github.com/slsa-framework/verifier/.github/workflows/release.yaml]" \
             --skip-buildtype-checks
         env:
           VERSION: ${{ steps.install.outputs.version }}
+          SIGNER: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main
 
   verify-build:
     name: verify/build (${{ matrix.os }})
@@ -101,7 +111,7 @@ jobs:
           artifacts: ${{ steps.release.outputs.artifact }}
           expected-source: github.com/slsa-framework/verifier
           trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/release.yaml
-          signer: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/verifier/.github/workflows/release.yaml@refs/tags/${{ steps.release.outputs.version }}
+          signer: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main
           skip-buildtype-checks: true
           vsa: release.vsa.json
 
