@@ -119,7 +119,7 @@ runs:
     # repository's release workflow as the builder, and be signed by
     # that workflow running at the requested tag.
     - name: Verify the slsa-verifier release provenance
-      uses: carabiner-dev/actions/ampel/verify@32587e82f960d49b36101e8c45d1956e511965d3 # v1.2.9
+      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
         subject: ${{ steps.download.outputs.binary }}
         collector: jsonl:${{ steps.download.outputs.attestations }}
