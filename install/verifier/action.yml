@@ -60,9 +60,8 @@ runs:
     # running at the requested tag.
     - if: ${{ inputs.verify == 'true' }}
       name: Verify the release provenance
-      uses: carabiner-dev/actions/ampel/verify@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
-        ampel-version: v1.5.0
         subject: ${{ steps.download.outputs.binary }}
         collector: jsonl:${{ steps.download.outputs.attestations }}
         policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/slsa-builder-id.json

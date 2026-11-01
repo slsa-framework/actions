@@ -221,9 +221,8 @@ runs:
     # as the builder, and be signed by the attest_actions observer.
     - name: Verify the attester release
       if: inputs.build-from-source != 'true' && inputs.verify == 'true'
-      uses: carabiner-dev/actions/ampel/verify@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
-        ampel-version: v1.5.0
         subject: ${{ steps.download.outputs.binary }}
         collector: jsonl:${{ steps.download.outputs.attestations }}
         policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/slsa-builder-id.json
@@ -255,7 +254,7 @@ runs:
 
     - id: go_versions
       if: inputs.build-from-source == 'true'
-      uses: carabiner-dev/actions/go/versions@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/go/versions@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
         go-mod-path: ${{ github.workspace }}/.slsa-attester/src/go.mod
 

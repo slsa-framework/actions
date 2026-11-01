@@ -52,7 +52,7 @@ runs:
 
     - id: go_versions
       if: inputs.build-from-source == 'true'
-      uses: carabiner-dev/actions/go/versions@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/go/versions@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
         go-mod-path: ${{ github.workspace }}/.bin/build/go.mod
 
@@ -103,12 +103,11 @@ runs:
 
     - id: verify_binary
       if: inputs.build-from-source == 'false'
-      uses: carabiner-dev/actions/ampel/verify@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       env:
         # This is the SLSA builder ID we will verify before running the sourcetool binary
         AMPEL_BUILDERID: "https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml"
       with:
-        ampel-version: v1.5.0
         subject: ${{ github.workspace }}/.bin/sourcetool
         collector: "jsonl:${{ github.workspace }}/.bin/attestations.intoto.jsonl"
         policy: "git+https://github.com/carabiner-dev/policies#slsa/slsa-builder-id.json"
@@ -155,9 +154,8 @@ runs:
 
     - name: Verify the slsa-verifier release provenance
       if: steps.slsa_verifier_gate.outputs.verify == 'true'
-      uses: carabiner-dev/actions/ampel/verify@d41fe10fe88deaf493ce026007da73738b9f570c # v1.3.0
+      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
       with:
-        ampel-version: v1.5.0
         subject: ${{ steps.download_verifier.outputs.binary }}
         collector: jsonl:${{ steps.download_verifier.outputs.attestations }}
         policy: git+https://github.com/carabiner-dev/policies@b4734ea025ac3d42a4ca78bec759aa72cebdb4a2#slsa/slsa-builder-id.json
