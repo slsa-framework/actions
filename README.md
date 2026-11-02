@@ -14,3 +14,6 @@ GitHub Actions for producing and verifying SLSA attestations.
 
 Every action is a composite action: pin it by commit SHA, pass inputs
 through `with:`, and see each action's README for its inputs and outputs.
+
+Coming from slsa-github-generator or slsa-verifier? See the
+[migration guide](docs/migration.md).
