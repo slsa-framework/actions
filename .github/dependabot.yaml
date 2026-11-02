@@ -6,9 +6,14 @@ updates:
   - package-ecosystem: "github-actions"
     directories:
       - "/"
+      - "attest/actions/"
       - "get_note/"
+      - "install/verifier/"
       - "slsa_with_provenance/"
       - "store_note/"
+      - "verify/build/"
+      - "verify/source/"
+      - "verify/vsa/"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
