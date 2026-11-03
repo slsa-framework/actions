@@ -11,7 +11,7 @@ branding:
 
 inputs:
   version:
-    description: 'slsa-verifier release to install, e.g. v0.1.0'
+    description: 'slsa-verifier release to install'
     required: false
     default: 'v0.1.0'
   install-dir:
