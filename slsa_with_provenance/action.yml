@@ -148,7 +148,7 @@ runs:
       shell: bash
       run: "${GITHUB_ACTION_PATH}/../install/verifier/download.sh"
       env:
-        VERSION: v0.1.0
+        VERSION: v0.1.1
         REPO: slsa-framework/verifier
         VERIFY: "true"
 
