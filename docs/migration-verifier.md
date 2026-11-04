@@ -77,7 +77,7 @@ command.
 
 The identity spec is flexible to allow matching principals in different
 ways, read the
-[Identity Matching documentation on the Policy Labs project](https://github.com/policylabs/signer/blob/main/docs/identity-matching.md)
+[Principals documentation on the Policy Labs project](https://github.com/policylabs/signer/blob/main/docs/principals.md)
 for more.
 
 ## The actions
