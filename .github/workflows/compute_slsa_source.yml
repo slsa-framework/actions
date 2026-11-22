@@ -8,9 +8,9 @@ on:
     inputs:
       allow-merge-commits:
         type: boolean
-        description: 'Experimental support for merge commits '
+        description: 'Allow merge commits in the branch. The merged branch must be linear.'
         required: false
-        default: false
+        default: true
 
       build-from-source:
         type: boolean
@@ -21,7 +21,7 @@ on:
       version:
         description: "sourcetool version to run"
         type: string
-        default: "v0.7.3"
+        default: "v0.7.4"
         required: false
 
 jobs:
