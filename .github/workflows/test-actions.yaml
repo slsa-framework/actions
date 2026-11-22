@@ -65,7 +65,9 @@ jobs:
             --skip-buildtype-checks
         env:
           VERSION: ${{ steps.install.outputs.version }}
-          SIGNER: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main
+          # Any ref of the attest_actions workflow: releases call it pinned
+          # by commit SHA, so the certificate names that commit.
+          SIGNER: 'sigstore(regexp)::https://token\.actions\.githubusercontent\.com::^https://github\.com/slsa-framework/actions/\.github/workflows/attest_actions\.yml@.*$'
 
   verify-build:
     name: verify/build (${{ matrix.os }})
@@ -111,7 +113,7 @@ jobs:
           artifacts: ${{ steps.release.outputs.artifact }}
           expected-source: github.com/slsa-framework/verifier
           trusted-builders: https://github.com/slsa-framework/verifier/.github/workflows/release.yaml
-          signer: sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main
+          signer: 'sigstore(regexp)::https://token\.actions\.githubusercontent\.com::^https://github\.com/slsa-framework/actions/\.github/workflows/attest_actions\.yml@.*$'
           skip-buildtype-checks: true
           vsa: release.vsa.json
 
