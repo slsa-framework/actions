@@ -221,7 +221,7 @@ runs:
     # as the builder, and be signed by the attest_actions observer.
     - name: Verify the attester release
       if: inputs.build-from-source != 'true' && inputs.verify == 'true'
-      uses: carabiner-dev/actions/ampel/verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
+      uses: carabiner-dev/actions/ampel/verify@2f56fd66c5ef961f72bca3dbacbbfbd9acc717ee # v1.3.2
       with:
         subject: ${{ steps.download.outputs.binary }}
         collector: jsonl:${{ steps.download.outputs.attestations }}
@@ -254,12 +254,12 @@ runs:
 
     - id: go_versions
       if: inputs.build-from-source == 'true'
-      uses: carabiner-dev/actions/go/versions@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
+      uses: carabiner-dev/actions/go/versions@2f56fd66c5ef961f72bca3dbacbbfbd9acc717ee # v1.3.2
       with:
         go-mod-path: ${{ github.workspace }}/.slsa-attester/src/go.mod
 
     - if: inputs.build-from-source == 'true'
-      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
       with:
         go-version: ${{ steps.go_versions.outputs.GO_VERSION_STABLE }}
         cache-dependency-path: ${{ github.workspace }}/.slsa-attester/src/go.sum
