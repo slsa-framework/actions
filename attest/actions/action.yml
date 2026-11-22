@@ -125,7 +125,7 @@ inputs:
   version:
     description: "slsa-attester release to download when not building from source"
     required: false
-    default: "v0.1.1"
+    default: "v0.1.2"
 
 outputs:
   attestation:

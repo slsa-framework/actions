@@ -21,7 +21,7 @@ inputs:
     required: true
 
 runs:
-  using: "Composite"
+  using: "composite"
   steps:
     # This PoC depends on creating and checking information when branches are updated (e.g. via push).
     # Don't allow runs that do not occur during pushes.
@@ -148,7 +148,7 @@ runs:
       shell: bash
       run: "${GITHUB_ACTION_PATH}/../install/verifier/download.sh"
       env:
-        VERSION: v0.1.1
+        VERSION: v0.1.2
         REPO: slsa-framework/verifier
         VERIFY: "true"
 
