@@ -231,6 +231,52 @@ runs:
         ALLOW_MERGE_COMMITS: ${{ inputs.allow-merge-commits }}
         PUSH_FLAG: ${{ steps.configure_push.outputs.push_flag }}
 
+    # A tag is attested from the VSA of the commit it points to. When the tag
+    # is pushed together with its commit, the branch run that issues that VSA
+    # is still going when this one starts. Wait for the VSA to show up in the
+    # commit's git note before attesting the tag. When it never does, go on and
+    # let sourcetool fail with its own error.
+    - id: wait_for_commit_vsa
+      name: Wait for the VSA of the tagged commit
+      if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        NOTES_REF="refs/notes/slsa-wait"
+        deadline=$(( $(date +%s) + WAIT_SECONDS ))
+
+        has_vsa() {
+          # The notes ref does not exist until the first attestation is pushed
+          git fetch --quiet --no-tags origin "+refs/notes/commits:${NOTES_REF}" 2>/dev/null || return 1
+          # The note is a JSONL bundle, the statements are base64 encoded
+          git notes --ref="${NOTES_REF}" show "${COMMIT_SHA}" 2>/dev/null \
+            | jq -eRn --arg type "${VSA_PREDICATE_TYPE}" \
+                'any(inputs | try (fromjson | (.dsseEnvelope.payload // .payload) | @base64d | fromjson | .predicateType) catch empty; . == $type)' \
+                >/dev/null 2>&1
+        }
+
+        waited=0
+        until has_vsa; do
+          if [ "$(date +%s)" -ge "${deadline}" ]; then
+            echo "::warning::No VSA found for commit ${COMMIT_SHA} after ${WAIT_SECONDS} seconds"
+            break
+          fi
+          if [ "${waited}" -eq 0 ]; then
+            echo "Commit ${COMMIT_SHA} has no VSA yet, waiting up to ${WAIT_SECONDS} seconds for it"
+          fi
+          waited=1
+          sleep "${POLL_SECONDS}"
+        done
+        if [ "${waited}" -eq 1 ] && has_vsa; then
+          echo "Found the VSA of commit ${COMMIT_SHA}"
+        fi
+        git update-ref -d "${NOTES_REF}" 2>/dev/null || true
+      env:
+        COMMIT_SHA: ${{ github.sha }}
+        WAIT_SECONDS: "300"
+        POLL_SECONDS: "10"
+        VSA_PREDICATE_TYPE: https://slsa.dev/verification_summary/v1
+
     - id: handle_tag_push
       if: ${{ startsWith(github.ref, 'refs/tags/') }}
       # See the note on handle_branch_push above regarding shell injection.
